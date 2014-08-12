@@ -1,0 +1,123 @@
+update LOTUS.LOTUS_POS_VENDORS_REGION V --update by RTVREGION
+         set (RTV_ADDRESS_1, RTV_ADDRESS_2, RTV_ADDRESS_3, RTV_CITY, RTV_STATE_ID, RTV_COUNTRY_ID, RTV_FAX, RTV_PHONE, RTV_CONTACT) = 
+                                                                                                                               (select A.ADDRESS_1,
+                                                                                                                                              A.ADDRESS_2,
+                                                                                                                                              A.ADDRESS_3,
+                                                                                                                                              A.CITY,
+                                                                                                                                              A.STATE_ID,
+                                                                                                                                              A.COUNTRY_ID,
+                                                                                                                                              A.FAX,
+                                                                                                                                              A.PHONE,
+                                                                                                                                              (select CONTACT_NAME
+                                                                                                                                                 from CONTACT C
+                                                                                                                                                where C.BUSINESS_UNIT_ID =
+                                                                                                                                                      L_B_U_I
+                                                                                                                                                  and C.ADDRESS_ID =
+                                                                                                                                                      A.ADDRESS_ID
+                                                                                                                                                  and C.ADDRESS_TYPE_ID =
+                                                                                                                                                      A.ADDRESS_TYPE_ID)
+                                                                                                                                         from ADDRESS A
+                                                                                                                                        where A.BUSINESS_UNIT_ID =
+                                                                                                                                              L_B_U_I
+                                                                                                                                          and A.ADDRESS_TYPE_ID =
+                                                                                                                                              'RV' ||
+                                                                                                                                              region_recorde.region_id
+                                                                                                                                          and A.ADDRESS_SOURCE_ID =
+                                                                                                                                              V.VENDOR_ID
+                                                                                                                                          and rownum < 2)
+       where BUSINESS_UNIT_ID = L_B_U_I
+         and V.REGION_ID = region_recorde.region_id 
+         and exists (select '0'
+                from VENDORS VD
+               where VD.BUSINESS_UNIT_ID = L_B_U_I
+                 and VD.VENDOR_ID = V.VENDOR_ID)
+         and exists
+       (select '0'
+                from ADDRESS addr
+               where addr.BUSINESS_UNIT_ID = L_B_U_I
+                 and addr.ADDRESS_TYPE_ID = 'RV' || region_recorde.region_id                  
+                 and addr.ADDRESS_SOURCE_ID = V.VENDOR_ID)
+         and V.PROCESS_DATE_TIME is null;
+      rows_rtvregion := SQL%ROWCOUNT;
+      rows_total     := rows_total + rows_rtvregion;
+    end loop;
+    -----------------------------------------------------------------------   
+    update LOTUS.LOTUS_POS_VENDORS_REGION V --update by RTV
+       set (RTV_ADDRESS_1, RTV_ADDRESS_2, RTV_ADDRESS_3, RTV_CITY, RTV_STATE_ID, RTV_COUNTRY_ID, RTV_FAX, RTV_PHONE, RTV_CONTACT) = (select A.ADDRESS_1,
+                                                                                                                                            A.ADDRESS_2,
+                                                                                                                                            A.ADDRESS_3,
+                                                                                                                                            A.CITY,
+                                                                                                                                            A.STATE_ID,
+                                                                                                                                            A.COUNTRY_ID,
+                                                                                                                                            A.FAX,
+                                                                                                                                            A.PHONE,
+                                                                                                                                            (select CONTACT_NAME
+                                                                                                                                               from CONTACT C
+                                                                                                                                              where C.BUSINESS_UNIT_ID =
+                                                                                                                                                    L_B_U_I
+                                                                                                                                                and C.ADDRESS_ID =
+                                                                                                                                                    A.ADDRESS_ID
+                                                                                                                                                and C.ADDRESS_TYPE_ID =
+                                                                                                                                                    A.ADDRESS_TYPE_ID)
+                                                                                                                                       from ADDRESS A
+                                                                                                                                      where A.BUSINESS_UNIT_ID =
+                                                                                                                                            L_B_U_I
+                                                                                                                                        and A.ADDRESS_TYPE_ID =
+                                                                                                                                            'RTV'
+                                                                                                                                        and A.ADDRESS_SOURCE_ID =
+                                                                                                                                            V.VENDOR_ID
+                                                                                                                                        and rownum < 2)
+     where BUSINESS_UNIT_ID = L_B_U_I     
+       and exists (select '0'
+              from VENDORS VD
+             where VD.BUSINESS_UNIT_ID = L_B_U_I
+               and VD.VENDOR_ID = V.VENDOR_ID)
+       and exists (select '0'
+              from ADDRESS addr
+             where addr.BUSINESS_UNIT_ID = L_B_U_I
+               and addr.ADDRESS_TYPE_ID = 'RTV'
+               and addr.ADDRESS_SOURCE_ID = V.VENDOR_ID)
+       and V.ADDRESS_1 || V.ADDRESS_2 || V.ADDRESS_3 IS NULL
+       and V.PROCESS_DATE_TIME is null;
+    rows_rtv   := SQL%ROWCOUNT;
+    rows_total := rows_total + rows_rtv;
+  end;
+
+  ----------------------------------UPDATE THE NULL FIELD-------------------------------------------
+  update LOTUS.LOTUS_POS_VENDORS_REGION V
+     set RTV_ADDRESS_1  = nvl(RTV_ADDRESS_1, ADDRESS_1),
+         RTV_ADDRESS_2  = nvl(RTV_ADDRESS_2, ADDRESS_2),
+         RTV_ADDRESS_3  = nvl(RTV_ADDRESS_3, ADDRESS_3),
+         RTV_CITY       = nvl(RTV_CITY, CITY),
+         RTV_STATE_ID   = nvl(RTV_STATE_ID, STATE),
+         RTV_COUNTRY_ID = nvl(RTV_COUNTRY_ID, COUNTRY),
+         RTV_FAX        = nvl(RTV_FAX, FAX),
+         RTV_PHONE      = nvl(RTV_PHONE, TELEPHONE),
+         RTV_CONTACT    = nvl(RTV_CONTACT, CONTACT_FIRST_NAME)
+   where BUSINESS_UNIT_ID = L_B_U_I
+     and (RTV_ADDRESS_1 is null or RTV_ADDRESS_2 is null or
+         RTV_ADDRESS_3 is null or RTV_CITY is null or RTV_STATE_ID is null or
+         RTV_COUNTRY_ID is null or RTV_FAX is null or RTV_PHONE is null or
+         RTV_CONTACT is null)
+     and exists (select '0'
+            from VENDORS VD
+           where VD.BUSINESS_UNIT_ID = L_B_U_I
+             and VD.VENDOR_ID = V.VENDOR_ID)
+     and V.PROCESS_DATE_TIME is null;
+  rows_other := SQL%ROWCOUNT;
+  rows_total := rows_total + rows_other;
+  insert into vda.error_log
+    (ERROR_CODE, ERROR_MSG, ERROR_TS, module)
+  values
+    (0,
+     'Update vendor address null field-> ' || to_char(rows_other),
+     sysdate,
+     module_name);
+     
+  insert into vda.error_log
+    (ERROR_CODE, ERROR_MSG, ERROR_TS, module)
+  values
+    (0,
+     'End->Update vendor address totally ' || to_char(rows_total),
+     sysdate,
+     module_name);
